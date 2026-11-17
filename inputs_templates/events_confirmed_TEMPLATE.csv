@@ -1,0 +1,2 @@
+event_id,take_id,video_id,subject_id,marker_id,frame_idx,foot_crossing_confirmed,annotation_source,gt_distance_m,pass_id,lane,timestamp_s,track_id,body_class_gt,notes
+EV_EXAMPLE_JANGAN_DIPAKAI,Take1,video_1,CAL_MPV_01,M05,1234,FALSE,replace_with_manual_review_source,,pass1,left,,T12,MPV,"Baris contoh sengaja FALSE supaya tidak bisa terpakai tak sengaja. Ganti dengan event hasil review crossing sungguhan; foot_crossing_confirmed harus TRUE dan annotation_source harus menunjukkan review manual."

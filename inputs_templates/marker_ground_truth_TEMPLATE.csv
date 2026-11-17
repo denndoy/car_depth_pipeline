@@ -1,0 +1,10 @@
+marker_id,nominal_position_m,gt_distance_m,derivation
+M01,,,,Isi jarak terukur marker 1 dari titik 0 sejajar kamera. Ganti teks derivation ini dengan catatan pengukuran lapangan Anda.
+M02,,,,Isi jarak terukur marker 2. Jaga sela antar marker konsisten (contoh acuan penelitian person: 6.6 m).
+M03,,,,Isi jarak terukur marker 3.
+M04,,,,Isi jarak terukur marker 4.
+M05,,,,Isi jarak terukur marker 5.
+M06,,,,Isi jarak terukur marker 6.
+M07,,,,Isi jarak terukur marker 7.
+M08,,,,Isi jarak terukur marker 8.
+M09,,,,Isi jarak terukur marker 9 (marker terjauh).

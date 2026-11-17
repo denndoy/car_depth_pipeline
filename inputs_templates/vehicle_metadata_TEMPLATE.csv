@@ -1,0 +1,13 @@
+vehicle_id,body_class_gt,make_model,length_m,width_m,height_m,color,plate_action,notes
+CAL_MPV_01,MPV,"contoh: Toyota Avanza",4.4,1.6,1.7,putih,blurred,"Ganti baris contoh ini. Kendaraan kalibrasi MPV #1 - pilih yang mencakup rentang ukuran kelas (kecil/sedang/besar)."
+CAL_MPV_02,MPV,"contoh: Mitsubishi Xpander",4.6,1.75,1.75,hitam,blurred,"Kendaraan kalibrasi MPV #2."
+CAL_MPV_03,MPV,"contoh: Toyota Kijang Innova",4.7,1.8,1.8,abu,blurred,"Kendaraan kalibrasi MPV #3 (opsional jika hanya 2 mobil per kelas)."
+CAL_SEDAN_01,Sedan,"contoh: Toyota Vios",4.4,1.74,1.48,perak,blurred,"Kendaraan kalibrasi Sedan #1."
+CAL_SEDAN_02,Sedan,"contoh: Honda Civic",4.65,1.8,1.43,putih,blurred,"Kendaraan kalibrasi Sedan #2."
+CAL_SEDAN_03,Sedan,"contoh: Toyota Camry",4.9,1.84,1.45,hitam,blurred,"Kendaraan kalibrasi Sedan #3 (opsional)."
+CAL_HATCHBACK_01,Hatchback,"contoh: Honda Brio",3.8,1.68,1.52,merah,blurred,"Kendaraan kalibrasi Hatchback #1."
+CAL_HATCHBACK_02,Hatchback,"contoh: Suzuki Swift",3.9,1.7,1.5,biru,blurred,"Kendaraan kalibrasi Hatchback #2."
+CAL_HATCHBACK_03,Hatchback,"contoh: Toyota Yaris",4.1,1.73,1.5,kuning,blurred,"Kendaraan kalibrasi Hatchback #3 (opsional)."
+TEST_MPV_01,MPV,mobil MPV video uji,,,,"",blurred,"Mobil video uji tidak boleh sama dengan mobil kalibrasi; isi yang terlihat di Video 2-4."
+TEST_SEDAN_01,Sedan,mobil sedan video uji,,,,,blurred,"Contoh baris video uji."
+TEST_HATCHBACK_01,Hatchback,mobil hatchback video uji,,,,,blurred,"Contoh baris video uji."

@@ -1,0 +1,17 @@
+{
+  "schema": "car_depth_pipeline_config_v1",
+  "description": "Konfigurasi terkunci hasil diskusi: kuartik per kelas body type, crossing bumper depan dengan mobil selalu mendekat ke kamera, classifier fine-tune dari dataset Kaggle 8 kelas (dipakai 3 kelas), fallback ke kuartik global saat confidence rendah.",
+  "body_classes": ["MPV", "Sedan", "Hatchback"],
+  "dataset_source_classes": ["mpv", "sedan", "hatchback"],
+  "dataset_source": "https://www.kaggle.com/datasets/muhammadluthfiarifin/indonesian-cars-classification-dataset",
+  "classifier_imgsz": 224,
+  "fallback_threshold": 0.6,
+  "fallback_behavior": "Jika top-1 probability classifier < threshold, atau track tidak punya prediksi, gunakan kuartik global. Keputusan fallback selalu dicatat per event di output evaluasi.",
+  "detector_coco_class_id": 2,
+  "detector_class_name": "car",
+  "recommended_calibration_vehicles_per_class": 3,
+  "minimum_calibration_vehicles_per_class": 2,
+  "crossing_definition": "Front bumper menyentuh garis marker. Mobil selalu mendekat ke kamera sehingga bumper depan berada di tepi bawah bounding box (proksi: bottom-center box, sama seperti pipeline person).",
+  "fps_note": "Video 30 fps. Pada 20-30 km/jampb ketidakpastian frame crossing ~0.19-0.28 m; aturan review: pilih frame di mana bumper paling menempel garis, konsisten antara kalibrasi dan inference.",
+  "ethics_note": "Blur plat nomor pada semua media yang akan dibagikan/diunggah."
+}
