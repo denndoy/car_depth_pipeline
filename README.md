@@ -291,7 +291,7 @@ dibutuhkan ada di:
 | `scripts/vendor_tracking/prepare_track_review.py` | review offline track→kendaraan Take 1 |
 | `scripts/vendor_tracking/apply_subject_crosswalk.py` | terapkan mapping manual tanpa menimpa raw detections |
 | `scripts/vendor_distance/polynomial_take_pipeline.py` | validator GT/event/detection/metadata dan fungsi prediksi |
-| `scripts/vendor_distance/evaluate_final_monotone_quartics.py` | fit kuartik monoton + verifikasi turunan secara analitik |
+| `scripts/vendor_distance/monotone_quartic.py` | fit kuartik monoton + verifikasi turunan secara analitik |
 
 Kelima helper disalin dari modul generik penelitian person; berkas aslinya
 tidak diubah. `scripts/vendor_tracking/README.md` dan
