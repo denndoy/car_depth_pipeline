@@ -11,8 +11,8 @@ refits) and scores manually confirmed crossing events of unseen cars:
 - ``global``     : class-agnostic baseline quartic for every event.
 
 Crossing events must be manually confirmed (same strict validation as the
-person research). Generic helpers are imported read-only from
-scripts/04_distance_evaluation; no person-research file is edited.
+person research). Generic helpers are imported from local vendored copies in
+scripts/vendor_distance; the original research source tree is not required.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "04_distance_evaluation"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts" / "vendor_distance"))
 
 from polynomial_take_pipeline import (  # noqa: E402
     DEGREE,
@@ -44,10 +44,10 @@ from polynomial_take_pipeline import (  # noqa: E402
     validate_tracking_metadata,
     workspace_path,
 )
-from evaluate_final_monotone_quartics import predict  # noqa: E402
+from monotone_quartic import predict  # noqa: E402
 
-DEFAULT_CONFIG = ROOT / "car_depth_pipeline" / "configs" / "bodytype_config.json"
-DEFAULT_MARKER_GT = ROOT / "car_depth_pipeline" / "inputs" / "marker_ground_truth.csv"
+DEFAULT_CONFIG = ROOT / "configs" / "bodytype_config.json"
+DEFAULT_MARKER_GT = ROOT / "inputs" / "marker_ground_truth.csv"
 GLOBAL_MODEL_ID = "global_quartic_monotone_take1"
 CLASS_MODELS_KEY = "body_class_quartic_monotone_take1"
 

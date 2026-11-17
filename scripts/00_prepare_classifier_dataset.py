@@ -27,8 +27,17 @@ from pathlib import Path
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 VAL_DIR_NAMES = ("val", "valid", "validation")
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = ROOT / "car_depth_pipeline" / "configs" / "bodytype_config.json"
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG = ROOT / "configs" / "bodytype_config.json"
+
+
+def resolve_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    if (Path.cwd().resolve() == ROOT.parent.resolve()
+            and path.parts and path.parts[0].casefold() == ROOT.name.casefold()):
+        return (Path.cwd() / path).resolve()
+    return (ROOT / path).resolve()
 
 
 def load_body_classes(config_path: Path) -> tuple[list[str], list[str]]:
@@ -96,8 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hash-manifest", action="store_true", help="Also record sha256 per copied file (slower)")
     args = parser.parse_args(argv)
 
-    src = args.src if args.src.is_absolute() else ROOT / args.src
-    dst = args.dst if args.dst.is_absolute() else ROOT / args.dst
+    src = resolve_path(args.src)
+    dst = resolve_path(args.dst)
     if not src.is_dir():
         raise SystemExit(f"Source dataset folder not found: {src}")
     if dst.exists() and any(dst.iterdir()):
@@ -106,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("val-frac/test-frac must be in [0, 1) and sum to less than 1")
 
     body_classes, source_classes = load_body_classes(
-        args.config if args.config.is_absolute() else ROOT / args.config
+        resolve_path(args.config)
     )
     if not source_classes:
         raise SystemExit("configs/bodytype_config.json has no dataset_source_classes")
@@ -121,14 +130,19 @@ def main(argv: list[str] | None = None) -> int:
     rng = random.Random(args.seed)
     manifest_rows: list[dict[str, str]] = []
     counts: dict[str, dict[str, int]] = {canonical: {split: 0 for split in splits} for canonical in body_classes}
-    skipped_other_classes = 0
+    selected_source_classes = {name.casefold() for name in source_classes}
+    skipped_other_classes = sum(
+        len(image_files(folder))
+        for split_dir in splits.values()
+        for name, folder in class_folders(split_dir).items()
+        if name not in selected_source_classes
+    )
 
     for split, directory in splits.items():
         class_dirs = class_dirs_by_split[split]
         for casefold, folder in class_dirs.items():
             canonical = canonical_by_casefold.get(casefold)
             if canonical is None or casefold not in source_by_casefold:
-                skipped_other_classes += len(image_files(folder))
                 continue
             files = image_files(folder)
             if mode == "flat":

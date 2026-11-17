@@ -29,11 +29,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "scripts"
-ROOT = HERE.parents[1]
+ROOT = HERE.parent
 PY = sys.executable
 
 MARKERS = {f"M{index:02d}": round(6.6 * index, 3) for index in range(1, 10)}
@@ -185,12 +186,49 @@ def test_prepare_classifier_dataset(tmp: Path) -> None:
     assert set(summary["counts_by_class_by_split"]) == {"MPV", "Sedan", "Hatchback"}, summary
     assert summary["counts_by_class_by_split"]["MPV"] == {"train": 6, "val": 6, "test": 6}, summary
     assert summary["counts_by_class_total"] == {"MPV": 18, "Sedan": 15, "Hatchback": 12}, summary
+    assert summary["skipped_images_from_other_classes"] == 15, summary
     assert (dst / "train" / "MPV").is_dir() and len(list((dst / "train" / "MPV").iterdir())) == 6
     assert len(list((dst / "val" / "Sedan").iterdir())) == 5
     assert not (dst / "train" / "suv").exists()
     manifest = list(csv.DictReader((dst / "manifest.csv").open(encoding="utf-8-sig")))
     assert len(manifest) == 45 and all(row["body_class"] in {"MPV", "Sedan", "Hatchback"} for row in manifest)
     print("  ok: 00_prepare_classifier_dataset (split mode, 3-of-8 classes, suv/truck ignored)")
+
+
+def test_deduplicated_dataset_cleaner(tmp: Path) -> None:
+    source_zip = tmp / "tiny_kaggle_dataset.zip"
+    members = {
+        "dataset/train/hatchback/hatch_train.jpg": b"hatch-train-image",
+        "dataset/train/mpv/mpv_train.jpg": b"mpv-train-image",
+        "dataset/train/sedan/sedan_train.jpg": b"sedan-train-image",
+        "dataset/val/hatchback/hatch_duplicate.jpg": b"hatch-train-image",
+        "dataset/val/hatchback/hatch_val.jpg": b"hatch-val-image",
+        "dataset/val/mpv/mpv_val.jpg": b"mpv-val-image",
+        "dataset/val/sedan/sedan_conflict.jpg": b"cross-class-conflict-image",
+        "dataset/val/sedan/sedan_val.jpg": b"sedan-val-image",
+        "dataset/val/crossover/crossover_conflict.jpg": b"cross-class-conflict-image",
+        "dataset/test/hatchback/hatch_test.jpg": b"hatch-test-image",
+        "dataset/test/mpv/mpv_test.jpg": b"mpv-test-image",
+        "dataset/test/sedan/sedan_test.jpg": b"sedan-test-image",
+    }
+    with zipfile.ZipFile(source_zip, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, data in members.items():
+            archive.writestr(name, data)
+    output_dir = tmp / "deduplicated_dataset"
+    run(SCRIPTS / "10_prepare_deduplicated_classifier_dataset.py", [
+        "--source-zip", str(source_zip), "--output-dir", str(output_dir),
+    ])
+    summary = json.loads((output_dir / "summary.json").read_text(encoding="utf-8"))
+    assert summary["clean_total"] == 9, summary
+    assert summary["target_groups_with_duplicates_across_splits"] == 1, summary
+    assert summary["same_label_duplicate_copies_removed"] == 1, summary
+    assert summary["cross_class_exact_hash_conflict_groups"] == 1, summary
+    assert summary["target_files_excluded_due_to_cross_class_conflict"] == 1, summary
+    assert len(list((output_dir / "train" / "Hatchback").glob("*.jpg"))) == 1
+    assert len(list((output_dir / "val" / "Hatchback").glob("*.jpg"))) == 1
+    assert not list((output_dir / "val" / "Sedan").glob("*conflict*"))
+    assert len(list(csv.DictReader((output_dir / "cross_class_conflicts.csv").open(encoding="utf-8-sig")))) == 1
+    print("  ok: 10_prepare_deduplicated_classifier_dataset (train-priority dedup + cross-label quarantine)")
 
 
 def test_fit_and_evaluate(tmp: Path, rng: random.Random) -> None:
@@ -328,17 +366,207 @@ def test_enrich_events(tmp: Path) -> None:
     print("  ok: 05_enrich_events_with_class (fill + casefold + unknown-vehicle rejection)")
 
 
+def test_manual_classifier_tools(tmp: Path) -> None:
+    review_dir = tmp / "manual_review"
+    classes = ["MPV", "Sedan", "Hatchback"]
+    rows = []
+    predictions = []
+    for split, video_id, per_class in (("train", "video_train", 3), ("val", "video_val", 2)):
+        index = 0
+        for body_class in classes:
+            for _ in range(per_class):
+                crop_id = f"{video_id}_{index}"
+                crop_path = f"all_crops/{split}/{crop_id}.jpg"
+                target = review_dir / crop_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"synthetic test crop")
+                rows.append({
+                    "crop_id": crop_id,
+                    "source_split": "train" if split == "train" else "val",
+                    "source_video_id": video_id,
+                    "source_frame": f"{split}/images/{video_id}_f000001.jpg",
+                    "bbox_index": str(index),
+                    "crop_path": crop_path,
+                    "corrected_label": body_class,
+                    "notes": "synthetic",
+                })
+                predicted = body_class
+                if split == "val" and body_class == "MPV" and index == 0:
+                    predicted = "Sedan"
+                predictions.append({
+                    "crop_id": crop_id,
+                    "source_split": split,
+                    "predicted_label": predicted,
+                    "confidence": "0.9",
+                })
+                index += 1
+    # Excluded study-test video: labels may remain blank and must not enter train/val.
+    for index in range(3):
+        crop_id = f"video_excluded_{index}"
+        crop_path = f"all_crops/train/{crop_id}.jpg"
+        target = review_dir / crop_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"synthetic excluded crop")
+        rows.append({
+            "crop_id": crop_id,
+            "source_split": "train",
+            "source_video_id": "video_excluded",
+            "source_frame": f"train/images/video_excluded_f000001.jpg",
+            "bbox_index": str(index),
+            "crop_path": crop_path,
+            "corrected_label": "",
+            "notes": "excluded by research split policy",
+        })
+    reviewed_csv = tmp / "manual_reviewed.csv"
+    predictions_csv = tmp / "manual_predictions.csv"
+    split_map = tmp / "video_split_map.csv"
+    write_csv(reviewed_csv, rows)
+    write_csv(predictions_csv, predictions)
+    write_csv(split_map, [
+        {"source_video_id": "video_train", "split": "train"},
+        {"source_video_id": "video_val", "split": "val"},
+        {"source_video_id": "video_excluded", "split": "exclude"},
+    ])
+
+    dataset = tmp / "manual_classifier_dataset"
+    run(SCRIPTS / "07_build_reviewed_classifier_dataset.py", [
+        "--review-dir", str(review_dir), "--reviewed-csv", str(reviewed_csv),
+        "--video-split-map", str(split_map), "--out-dir", str(dataset),
+    ])
+    dataset_summary = json.loads((dataset / "summary.json").read_text(encoding="utf-8"))
+    assert dataset_summary["counts_by_split"]["train"] == {"MPV": 3, "Sedan": 3, "Hatchback": 3}
+    assert dataset_summary["counts_by_split"]["val"] == {"MPV": 2, "Sedan": 2, "Hatchback": 2}
+    assert dataset_summary["excluded_uncertain_skip_or_video_policy"] == 3
+    assert not (dataset / "train" / "video_excluded_0.jpg").exists()
+    for split in ("train", "val"):
+        assert all((dataset / split / class_name).is_dir() for class_name in classes)
+
+    report = tmp / "manual_classifier_metrics"
+    run(SCRIPTS / "09_score_classifier_review.py", [
+        "--reviewed-csv", str(reviewed_csv), "--predictions-csv", str(predictions_csv),
+        "--video-split-map", str(split_map), "--split", "val", "--out-dir", str(report),
+    ])
+    scored = json.loads((report / "metrics.json").read_text(encoding="utf-8"))
+    assert scored["scored_count"] == 6
+    assert scored["split_policy"] == "explicit research video split map"
+    assert scored["confusion_matrix_rows_true_columns_predicted"]["MPV"]["Sedan"] == 1
+
+    blocked = subprocess.run(
+        [PY, str(SCRIPTS / "07_build_reviewed_classifier_dataset.py"),
+         "--review-dir", str(review_dir), "--reviewed-csv", str(reviewed_csv),
+         "--out-dir", str(tmp / "blocked_dataset")],
+        capture_output=True, text=True, timeout=120, cwd=str(ROOT),
+    )
+    assert blocked.returncode != 0 and "video-split-map" in (blocked.stdout + blocked.stderr)
+    print("  ok: 06-09 manual-label dataset, video split guard, and held-out metrics")
+
+
+def test_frame_trajectory_export(tmp: Path) -> None:
+    model_path = tmp / "frame_trajectory_models.json"
+    detections_path = tmp / "frame_trajectory_detections.csv"
+    tracking_summary_path = tmp / "frame_trajectory_tracking_summary.json"
+    output_path = tmp / "frame_trajectories.csv"
+
+    def constant_quartic(distance: float) -> dict:
+        return {
+            "normalization_mean_px2": 0.0,
+            "normalization_scale_px2": 1.0,
+            "coefficients_ascending": [distance, 0.0, 0.0, 0.0, 0.0],
+            "training_area_min_px2": 100.0,
+            "training_area_max_px2": 1000.0,
+        }
+
+    bundle = {
+        "schema": "car_bodyclass_and_global_monotone_quartic_v1",
+        "fallback_policy": {"threshold": 0.6},
+        "models": {
+            "global_quartic_monotone_take1": constant_quartic(30.0),
+            "body_class_quartic_monotone_take1": {
+                "MPV": constant_quartic(40.0),
+                "Sedan": constant_quartic(50.0),
+                "Hatchback": constant_quartic(60.0),
+            },
+        },
+    }
+    model_path.write_text(json.dumps(bundle), encoding="utf-8")
+    rows = []
+    for frame_idx in range(2):
+        for track_id, body_class, confidence, fallback in (
+            ("t-mpv", "MPV", "0.9", "FALSE"),
+            ("t-sedan", "Sedan", "0.4", "TRUE"),
+            ("t-unknown", "", "", "TRUE"),
+        ):
+            rows.append({
+                "video_id": "test_video",
+                "frame_idx": str(frame_idx),
+                "timestamp_s": str(frame_idx / 30),
+                "track_id": track_id,
+                "A_bb_px2": "400",
+                "center_x_px": "960",
+                "bodyclass_predicted_model_class": body_class,
+                "bodyclass_confidence_raw_softmax": confidence,
+                "bodyclass_fallback_to_global": fallback,
+            })
+    write_csv(detections_path, rows)
+    tracking_summary_path.write_text(json.dumps({
+        "videos": [{"video_id": "test_video", "source_width": 1920, "source_height": 1080, "source_fps": 30}],
+    }), encoding="utf-8")
+    run(SCRIPTS / "11_export_frame_trajectories.py", [
+        "--models", str(model_path), "--detections", str(detections_path),
+        "--tracking-summary", str(tracking_summary_path), "--video-id", "test_video",
+        "--output", str(output_path),
+    ])
+    trajectory_rows = list(csv.DictReader(output_path.open(encoding="utf-8-sig")))
+    assert len(trajectory_rows) == 6
+    by_track = {row["track_id"]: row for row in trajectory_rows}
+    assert by_track["t-mpv"]["pred_distance_m"] == "40.0"
+    assert by_track["t-mpv"]["distance_model_used"].startswith("bodyclass_MPV")
+    assert by_track["t-sedan"]["pred_distance_m"] == "30.0"
+    assert by_track["t-sedan"]["distance_model_used"] == "global_quartic_monotone_take1"
+    assert by_track["t-unknown"]["scene_eligible"] == "FALSE"
+    print("  ok: 11_export_frame_trajectories (class-specific/global routing, missing-label filtering)")
+
+
+def test_vendor_crossing_track_identity(tmp: Path) -> None:
+    vendor_dir = SCRIPTS / "vendor_distance"
+    sys.path.insert(0, str(vendor_dir))
+    try:
+        import marker_line_tools
+    finally:
+        sys.path.remove(str(vendor_dir))
+    detections = tmp / "raw_test_detections.csv"
+    write_csv(detections, [{
+        "video_id": "test_video", "frame_idx": "7", "subject_id": "", "track_id": "42",
+        "pass_id": "", "timestamp_s": "0.233333", "bottom_center_x_px": "800",
+        "bottom_center_y_px": "600", "x1_px": "700", "y1_px": "400", "x2_px": "900", "y2_px": "600",
+    }])
+    rows = marker_line_tools.detection_rows(detections, "test_video", 0, 10)
+    assert len(rows) == 1
+    assert rows[0]["subject_id"] == "42"
+    assert rows[0]["_vehicle_identity_source"] == "track_id_pseudo_vehicle_id"
+    assert rows[0]["_bumper_x"] == 800 and rows[0]["_bumper_y"] == 600
+    print("  ok: vendored crossing helper uses raw track_id as test-video pseudo vehicle ID")
+
+
 def main() -> int:
     rng = random.Random(20261117)
     with tempfile.TemporaryDirectory(prefix="car_pipeline_smoke_") as raw_tmp:
         tmp = Path(raw_tmp)
-        print("Smoke test 1/4: 00_prepare_classifier_dataset")
+        print("Smoke test 1/7: 00_prepare_classifier_dataset")
         test_prepare_classifier_dataset(tmp)
-        print("Smoke test 2/4: 03_fit_class_quartics + 04_evaluate_frozen")
+        print("Smoke test 2/7: 10_prepare_deduplicated_classifier_dataset")
+        test_deduplicated_dataset_cleaner(tmp)
+        print("Smoke test 3/7: 03_fit_class_quartics + 04_evaluate_frozen")
         test_fit_and_evaluate(tmp, rng)
-        print("Smoke test 3/4: 05_enrich_events_with_class")
+        print("Smoke test 4/7: 05_enrich_events_with_class")
         test_enrich_events(tmp)
-    print("SMOKE TEST PASS: 00, 03, 04, 05 berjalan dan routing fallback/oracle/global benar.")
+        print("Smoke test 5/7: 07_build_reviewed_classifier_dataset + 09_score_classifier_review")
+        test_manual_classifier_tools(tmp)
+        print("Smoke test 6/7: 11_export_frame_trajectories")
+        test_frame_trajectory_export(tmp)
+        print("Smoke test 7/7: vendored raw-track crossing identity")
+        test_vendor_crossing_track_identity(tmp)
+    print("SMOKE TEST PASS: standalone dataset, tracking helper, crossing, quartic, classifier and 3D feeder components.")
     return 0
 
 

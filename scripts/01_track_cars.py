@@ -35,10 +35,10 @@ import ultralytics
 from ultralytics import YOLO
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_VIDEO_DIR = ROOT / "data"
 DEFAULT_WEIGHTS = ROOT / "models" / "yolov8n.pt"
-DEFAULT_OUTPUT_ROOT = ROOT / "car_depth_pipeline" / "outputs" / "tracking"
+DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "tracking"
 DETECTOR_CLASS_ID = 2
 DETECTOR_CLASS_NAME = "car"
 DETECTION_FIELDS = [
@@ -100,6 +100,22 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def resolve_path(path: Path) -> Path:
+    if path.is_absolute():
+        return path
+    if (Path.cwd().resolve() == ROOT.parent.resolve()
+            and path.parts and path.parts[0].casefold() == ROOT.name.casefold()):
+        return (Path.cwd() / path).resolve()
+    return (ROOT / path).resolve()
+
+
+def workspace_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(ROOT.resolve()).as_posix()
+    except ValueError:
+        return str(path.resolve())
+
+
 def make_track_thumbnail(frame, boxes, frame_idx: int, timestamp_s: float):
     thumb_width, thumb_height = 640, 360
     height, width = frame.shape[:2]
@@ -145,7 +161,7 @@ def write_contact_sheet(items: list[tuple[object, str]], output_path: Path) -> N
 
 
 def select_videos(video_dir: Path, explicit: list[Path] | None = None) -> list[Path]:
-    videos = [path if path.is_absolute() else ROOT / path for path in explicit] if explicit else sorted(video_dir.glob("*.mp4"))
+    videos = [resolve_path(path) for path in explicit] if explicit else sorted(video_dir.glob("*.mp4"))
     if not videos:
         raise FileNotFoundError(f"No MP4 files found in {video_dir}")
     if len({path.resolve() for path in videos}) != len(videos):
@@ -167,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video-dir", type=Path, default=DEFAULT_VIDEO_DIR)
     parser.add_argument("--video", type=Path, action="append", help="Process only this MP4 (repeatable); recommended per take")
-    parser.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS, help="COCO-pretrained YOLOv8n; keep identical across takes")
+    parser.add_argument("--weights", type=Path, required=True, help="Local COCO-pretrained YOLOv8n weights; keep identical across takes")
     parser.add_argument("--output-root", type=Path, default=DEFAULT_OUTPUT_ROOT)
     parser.add_argument("--run-id", default=f"yolov8n_car_imgsz1280_bytetrack_{datetime.now():%Y%m%d_%H%M%S}")
     parser.add_argument("--imgsz", type=int, default=1280)
@@ -186,11 +202,11 @@ def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    video_dir = args.video_dir if args.video_dir.is_absolute() else ROOT / args.video_dir
-    weights_path = args.weights if args.weights.is_absolute() else ROOT / args.weights
-    output_root = args.output_root if args.output_root.is_absolute() else ROOT / args.output_root
+    video_dir = resolve_path(args.video_dir)
+    weights_path = resolve_path(args.weights)
+    output_root = resolve_path(args.output_root)
     videos = select_videos(video_dir, args.video)
-    tracker_candidate = ROOT / args.tracker
+    tracker_candidate = resolve_path(Path(args.tracker))
     tracker = str(tracker_candidate if tracker_candidate.is_file() else args.tracker)
     if not weights_path.is_file():
         raise FileNotFoundError(f"Model weights not found: {weights_path}")
@@ -328,7 +344,7 @@ def main(argv: list[str] | None = None) -> None:
                             "h_px": f"{box_height:.3f}",
                             "A_bb_px2": f"{box_width * box_height:.3f}",
                             "center_x_px": f"{(x1 + x2) / 2.0:.3f}",
-                            "center_y_px": f"{(x1 + x2) / 2.0:.3f}",
+                            "center_y_px": f"{(y1 + y2) / 2.0:.3f}",
                             "bottom_center_x_px": f"{(x1 + x2) / 2.0:.3f}",
                             "bottom_center_y_px": f"{y2:.3f}",
                             "confidence": f"{float(confidence):.6f}",
@@ -386,7 +402,7 @@ def main(argv: list[str] | None = None) -> None:
             write_contact_sheet(previews, preview_path)
             summary = {
                 "video_id": video_path.stem,
-                "source": video_path.relative_to(ROOT).as_posix(),
+                "source": workspace_path(video_path),
                 "source_sha256": sha256_file(video_path),
                 "source_width": width,
                 "source_height": height,
@@ -407,7 +423,7 @@ def main(argv: list[str] | None = None) -> None:
                 "metadata_frame_count_note": metadata_mismatch_note,
                 "frame_index_basis": "zero_based_sequential_decode",
                 "timestamp_source_counts": dict(timestamp_sources),
-                "track_contact_sheet": preview_path.relative_to(ROOT).as_posix(),
+                "track_contact_sheet": workspace_path(preview_path),
             }
             summaries.append(summary)
             print(json.dumps(summary), flush=True)
@@ -435,7 +451,7 @@ def main(argv: list[str] | None = None) -> None:
     summary = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "model": weights_path.name,
-        "weights_path": weights_path.relative_to(ROOT).as_posix(),
+        "weights_path": workspace_path(weights_path),
         "weights_sha256": sha256_file(weights_path),
         "ultralytics_version": ultralytics.__version__,
         "torch_version": str(torch.__version__),

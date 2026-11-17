@@ -29,9 +29,9 @@ import torch
 from ultralytics import YOLO
 
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = ROOT / "car_depth_pipeline" / "configs" / "bodytype_config.json"
-DEFAULT_OUTPUT_ROOT = ROOT / "car_depth_pipeline" / "outputs" / "bodyclass"
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG = ROOT / "configs" / "bodytype_config.json"
+DEFAULT_OUTPUT_ROOT = ROOT / "outputs" / "bodyclass"
 TRACK_FIELDS_BASE = [
     "video_id", "pass_id", "track_id", "subject_id",
     "first_frame_idx", "last_frame_idx", "detection_rows", "sample_frame_idx",
@@ -40,7 +40,12 @@ TRACK_FIELDS_BASE = [
 
 
 def resolve(path: Path) -> Path:
-    return path if path.is_absolute() else ROOT / path
+    if path.is_absolute():
+        return path
+    if (Path.cwd().resolve() == ROOT.parent.resolve()
+            and path.parts and path.parts[0].casefold() == ROOT.name.casefold()):
+        return (Path.cwd() / path).resolve()
+    return (ROOT / path).resolve()
 
 
 def read_csv(path: Path) -> list[dict[str, str]]:

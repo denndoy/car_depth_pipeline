@@ -1,0 +1,24 @@
+# Python / local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local research data, model weights, and generated outputs
+data/
+inputs/
+datasets/
+outputs/
+runs/
+*.zip
+*.pt
+*.pt.zip
+
+# Blender backup and exported/generated scene files
+*.blend1
+*.glb
+*.fbx
+*.obj

@@ -1,6 +1,6 @@
-# Template Input `car_depth_pipeline/inputs/`
+# Template Input `inputs/`
 
-Salin (jangan pindahkan) template ke `car_depth_pipeline/inputs/`, isi datanya,
+Salin (jangan pindahkan) template ke `inputs/`, isi datanya,
 dan **jangan mengubah nama kolom** — skrip memvalidasi kolom ini.
 
 | Template | Disalin menjadi | Dipakai oleh |
@@ -10,6 +10,7 @@ dan **jangan mengubah nama kolom** — skrip memvalidasi kolom ini.
 | `vehicle_metadata_TEMPLATE.csv` | `vehicle_metadata.csv` | Dokumentasi kendaraan (provenance, bukan input skrip wajib) |
 | `review_subjects_TEMPLATE.csv` | `review_subjects.csv` | `prepare_track_review.py --subjects` (Take 1) |
 | `events_confirmed_TEMPLATE.csv` | `take1_events_confirmed.csv`, `take2_events_confirmed.csv`, dst. | `03_fit_class_quartics.py --events`, `04_evaluate_frozen.py --events` |
+| `classifier_video_split_TEMPLATE.csv` | `classifier_video_split.csv` | `07_build_reviewed_classifier_dataset.py`, `09_score_classifier_review.py` |
 
 ## `marker_ground_truth.csv` — jarak marker (GT)
 
@@ -55,10 +56,27 @@ skrip crosswalk penelitian person tetap kompatibel tanpa diubah.
 
 Wajib: `event_id` unik, `take_id`, `video_id`, `subject_id` (ID kendaraan;
 video uji boleh pseudo-ID seperti `T2_MPV_01`), `marker_id`, `frame_idx`,
-`foot_crossing_confirmed`=`TRUE`, `annotation_source` yang menunjukkan review
+`foot_crossing_confirmed`=`TRUE` (legacy column name; untuk mobil artinya bumper
+depan pada garis sudah dikonfirmasi), `annotation_source` yang menunjukkan review
 manual (validator menolak sumber auto/kandidat), **`body_class_gt`** (label
 kelas ground truth — kalibrasi dan oracle memakai kolom ini, bukan output
 classifier). Opsional: `gt_distance_m` (harus cocok tabel bila diisi),
 `pass_id`, `lane`, `timestamp_s`, `track_id`, `notes`.
 
 Kolom tambahan diabaikan oleh skrip; jangan menghapus/mengganti nama kolom wajib.
+
+## `classifier_video_split.csv` — split berbasis peran video penelitian
+
+Kolom wajib: `source_video_id,split`. Salin template dan isi `split` sebagai:
+
+- `train` — boleh dipakai fine-tuning classifier.
+- `val` — boleh dipakai pemilihan model/early stopping, bukan test final.
+- `test` — hanya evaluasi final; tidak boleh dipakai training, early stopping,
+  pemilihan threshold, atau pengembangan setelah metrik test dilihat.
+- `exclude` — tidak dimasukkan ke dataset classifier.
+
+**Jangan menganggap split `train`/`val` bawaan ZIP deteksi sebagai split classifier.**
+Pada ZIP saat ini Video 1–3 bertanda train dan Video 4 bertanda val. Bila Video
+2–4 adalah video uji utama penelitian, split deteksi tersebut akan membocorkan
+Video 2–3 ke fine-tuning. Tetapkan peran berdasarkan protokol eksperimen dan
+pastikan semua frame/kendaraan dari video yang sama tetap dalam satu split.

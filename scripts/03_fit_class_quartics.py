@@ -20,8 +20,8 @@ Design decisions locked with the researcher:
 - Take 1 metrics are in-sample calibration fit error, NOT test accuracy.
 
 Generic helpers (event validation, detection linking, tracking metadata
-checks, monotone quartic fitting) are imported read-only from the person
-research's scripts/04_distance_evaluation; no file of that research is edited.
+checks, monotone quartic fitting) are vendored under scripts/vendor_distance/
+as local copies. They are isolated from and do not modify the person project.
 """
 
 from __future__ import annotations
@@ -37,8 +37,8 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "scripts" / "04_distance_evaluation"))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts" / "vendor_distance"))
 
 from polynomial_take_pipeline import (  # noqa: E402
     DEGREE,
@@ -53,10 +53,10 @@ from polynomial_take_pipeline import (  # noqa: E402
     validate_tracking_metadata,
     workspace_path,
 )
-from evaluate_final_monotone_quartics import fit_monotone_quartic, predict  # noqa: E402
+from monotone_quartic import fit_monotone_quartic, predict  # noqa: E402
 
-DEFAULT_CONFIG = ROOT / "car_depth_pipeline" / "configs" / "bodytype_config.json"
-DEFAULT_MARKER_GT = ROOT / "car_depth_pipeline" / "inputs" / "marker_ground_truth.csv"
+DEFAULT_CONFIG = ROOT / "configs" / "bodytype_config.json"
+DEFAULT_MARKER_GT = ROOT / "inputs" / "marker_ground_truth.csv"
 
 
 def load_config(path: Path) -> dict:

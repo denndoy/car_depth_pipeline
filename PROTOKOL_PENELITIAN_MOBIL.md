@@ -3,7 +3,7 @@
 Dokumen metodologi untuk penelitian rekan. Alur mengikuti pipeline penelitian
 person *"Monocular Depth Estimation Using a Quartic Function of Object Pixel
 Count"* dengan object diganti mobil, plus penyesuaian yang diwajibkan oleh
-perbedaan skenario. Implementasi kode ada di folder `car_depth_pipeline/` ini;
+perbedaan skenario. Implementasi kode ada di folder `` ini;
 dokumen ini menjelaskan **mengapa dan bagaimana**, bukan hanya perintah.
 
 ---
@@ -91,7 +91,7 @@ Ringkasan:
    bumper-nya paling bersentuhan dengan garis, dan catat di `notes`.
 3. Konsisten untuk semua take; bila operator berganti, sesi review baru wajib
    membaca ulang aturan ini.
-4. Mobil yang box-nya terpotong tepi frame: gunakan `--clip-offscreen-feet`
+4. Mobil yang box-nya terpotong tepi frame: gunakan `--clip-offscreen-bumper`
    saat membuat kandidat dan review lebih hati-hati (luas box terpotong tidak
    valid untuk kuartik — tandain event untuk dieksklusi bila parah).
 5. Arah kandidat: mulai `--direction either`, periksa pola, lalu kunci arah
@@ -103,13 +103,32 @@ Ringkasan:
 ## 6. Classifier body type (MPV / Sedan / Hatchback)
 
 - Sumber: Kaggle *Indonesian Cars Classification Dataset* (8 kelas, Apache 2.0,
-  ~16 ribu gambar ter-crop; sisa kelas di-skip oleh `00`).
-- Layout output `00`: `train|val|test/{MPV,Sedan,Hatchback}` siap Ultralytics.
-- Fine-tune `yolov8n-cls.pt` (rekan sudah menjalankan). Catat provenance:
-  versi dataset, jumlah gambar per kelas, epoch, imgsz, augmentasi.
+  ~16 ribu gambar ter-crop). Utamakan `scripts/10_prepare_deduplicated_classifier_dataset.py`;
+  `00_prepare_classifier_dataset.py` adalah filter lama tanpa exact-hash dedup.
+- `10` menghasilkan `train|val|test/{Hatchback,MPV,Sedan}`. Audit dataset ini
+  menemukan exact duplicates antar-split dan beberapa gambar identik di lebih
+  dari satu label; `10` memindah duplicate satu-label ke split prioritas train>
+  val>test dan mengecualikan hash yang label sumbernya konflik. Near-duplicates
+  tetap perlu diperiksa terpisah.
+- Jika belum ada checkpoint 3-kelas, fine-tune dari pretrained
+  `yolov8n-cls.pt` pada dataset bersih. Jika sudah ada checkpoint 3-kelas,
+  `scripts/08_finetune_car_classifier.py` dapat melanjutkannya. Catat dataset,
+  provenance, epoch, imgsz, batch, learning rate, dan checkpoint hash.
 - **Validasi domain nyata**: buat label manual kecil dari crop hasil tracking
   Take 1 dan laporkan Top-1/recall per kelas di sana — angka di dataset web
   tidak mewakili crop perspektif jarak jauh.
+- `ultralytics_detection_4videos.zip` hanya memiliki label deteksi `car`; crop
+  body type harus diberi label manual. Split train (Video 1–3)/val (Video 4)
+  di ZIP dibuat untuk object detection, **bukan** split eksperimen classifier.
+  Jika Video 2–4 menjadi video uji estimasi jarak, jangan pakai crop-nya untuk
+  fine-tune, early stopping, atau memilih threshold. Gunakan `classifier_video_split.csv`
+  untuk menetapkan peran video; bila tidak ada video val non-test, gunakan
+  validation split Kaggle/rekaman tambahan. Crop manual blind disiapkan oleh
+   `scripts/06_prepare_blind_crop_review.py`.
+- Checkpoint lokal yang diperiksa memang mempunyai nama kelas Hatchback/MPV/Sedan
+  dan metadata 50 epoch, tetapi path dataset checkpoint bersifat internal. Jangan
+  menganggap Kaggle test split untouched untuk checkpoint tersebut sebelum
+  provenance training diverifikasi.
 - Konsumsi di pipeline: satu crop terbaik per track-segmen (terluas ×
   confidence tertinggi), label dipropagasi ke seluruh segmen agar tidak
   berkedip antar frame; raw softmax disimpan tanpa kalibrasi.
@@ -157,7 +176,27 @@ Ringkasan:
 5. Hasil mengukur generalisasi ke kendaraan baru sekelas pada setup kamera
    yang sama; bukan generalisasi lintas lokasi/kamera.
 
-## 10. Checklist eksekusi
+## 10. Arahan visualisasi 3D mobil (berbeda dari scene person)
+
+- Jangan menyalin scene person yang memakai jalan pedesaan/verge hijau dan
+  pepohonan. Gunakan **koridor jalan perkotaan** dengan gedung/fasad di kedua
+  sisi, trotoar, curb, marka jalan, dan elemen kota seperlunya. Hindari barisan
+  pohon sebagai dekorasi utama.
+- Gunakan aset lokal `3d model/1990s-hatchback.blend`,
+  `1990s-minivan.blend` (representasi visual MPV), dan
+  `1990s-sedan.blend`. Aset sudah dibuka, dirender, dan round-trip GLB diuji
+  di Blender 5.2.2; skala kira-kira metrik, tekstur terkemas.
+- Ketiga model adalah aset statis tanpa kamera/lampu/animasi. Root Empty dapat
+  dipakai untuk translasi kendaraan mengikuti hasil jarak; animasi rotasi roda
+  bersifat opsional. Scene generation harus membuat kamera, pencahayaan,
+  material jalan, gedung-gedung, dan komposisi urban tersendiri.
+- Model bertema 1990-an dan bersifat ilustratif, bukan rekonstruksi merek/model
+  kendaraan uji atau bukti dimensi fisik. Embedded metadata pada aset mencatat
+  Grab3D / Cozy Retro Cars Kit / CC0-1.0; lihat `3d model/README.md`. Ekspor uji
+  berhasil round-trip, tetapi visual material GLB tetap harus dicek karena
+  beberapa material mempunyai lebih dari satu image node untuk sampler.
+
+## 11. Checklist eksekusi
 
 - [ ] Isi `inputs/` dari template (GT marker, metadata kendaraan, review subjects)
 - [ ] Anotasi & profil marker (9/9 terkonfirmasi) + QC overlay tiap take

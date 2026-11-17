@@ -1,7 +1,8 @@
 """Attach the manual ground-truth body class to confirmed crossing event CSV(s).
 
-`marker_line_tools.py export-confirmed` writes event CSVs (reviewed crossing
-frames) but knows nothing about car body types. This helper joins
+`marker_line_tools.py export-confirmed` writes event CSVs (reviewed front-bumper
+crossing frames; the schema retains its legacy `foot_crossing_confirmed` name)
+but knows nothing about car body types. This helper joins
 ``vehicle_metadata.csv`` (vehicle_id -> body_class_gt) onto each event row and
 writes a NEW CSV with a required ``body_class_gt`` column, without touching the
 exported file.
@@ -20,12 +21,17 @@ import csv
 import json
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONFIG = ROOT / "car_depth_pipeline" / "configs" / "bodytype_config.json"
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG = ROOT / "configs" / "bodytype_config.json"
 
 
 def resolve(path: Path) -> Path:
-    return path if path.is_absolute() else ROOT / path
+    if path.is_absolute():
+        return path
+    if (Path.cwd().resolve() == ROOT.parent.resolve()
+            and path.parts and path.parts[0].casefold() == ROOT.name.casefold()):
+        return (Path.cwd() / path).resolve()
+    return (ROOT / path).resolve()
 
 
 def read_rows(path: Path) -> tuple[list[dict[str, str]], list[str]]:
